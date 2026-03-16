@@ -1,40 +1,22 @@
-<<<<<<< HEAD
 # market_features.py
-import random
+import numpy as np
 
-def scrape_market_trends(seed=None):
+def scrape_market_trends():
     """
-    Simulates real-time market data scraping. 
-    In production, replace with APIs from Zillow, Redfin, or local police databases.
+    Simulates real-time market data scraping.
+    Provides the 'Demand Index' for the RL Agent to adjust pricing.
     """
-    if seed is not None:
-        random.seed(seed)
-        
-    return {
-        "avg_price_today": random.uniform(400000, 900000),
-        "demand_index": random.uniform(0.7, 1.4), # >1 means high demand
-        "listing_count": random.randint(100, 2000),
-        "crime_rate": random.uniform(0.05, 0.8),
-        "safety_index": random.uniform(0.2, 1.0),
-        "police_distance": random.uniform(0.1, 10.0) # km
-=======
-# market_features.py
-import random
-
-def scrape_market_trends(seed=None):
-    """
-    Simulates real-time market data scraping. 
-    In production, replace with APIs from Zillow, Redfin, or local police databases.
-    """
-    if seed is not None:
-        random.seed(seed)
-        
-    return {
-        "avg_price_today": random.uniform(400000, 900000),
-        "demand_index": random.uniform(0.7, 1.4), # >1 means high demand
-        "listing_count": random.randint(100, 2000),
-        "crime_rate": random.uniform(0.05, 0.8),
-        "safety_index": random.uniform(0.2, 1.0),
-        "police_distance": random.uniform(0.1, 10.0) # km
->>>>>>> f1aeee6a5cef5e6f83d15321fd5985151c9c038d
+    # In production, this would use BeautifulSoup or an API to check 
+    # inventory levels and interest rates in the specific region.
+    
+    # Generate a demand index: 1.0 is stable, >1.0 is high demand, <1.0 is low
+    demand_index = np.random.uniform(0.8, 1.3)
+    
+    # Mock data for local market sentiment
+    market_data = {
+        "demand_index": round(demand_index, 2),
+        "inventory_status": "Low" if demand_index > 1.1 else "Normal",
+        "avg_days_on_market": int(30 / demand_index)
     }
+    
+    return market_data

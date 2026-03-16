@@ -3,12 +3,11 @@ import torch
 import torch.nn as nn
 
 class HousePricePredictor(nn.Module):
-    """
     Multimodal Architecture strictly aligned with the saved checkpoint:
     - Image Features: 2560 (Satellite + StreetView)
     - Tabular Features: 125 
     - Combined Hidden Layer: 512 + 128 = 640
-    """
+    
     def __init__(self, input_dim=None, image_dim=2560): # Forced to 2560 based on error
         super(HousePricePredictor, self).__init__()
         
