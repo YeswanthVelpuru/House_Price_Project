@@ -6,8 +6,8 @@ __pycache__/
 .env
 
 # Model artifacts and weights
-*.pkl
-*.pth
+# *.pkl
+# *.pth
 
 # Data and caches
 kc_house_data.csv
