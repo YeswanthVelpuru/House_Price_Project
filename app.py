@@ -131,7 +131,7 @@ with c1:
 
     if st.button("Predict Market Value"):
 
-        features = extract_live_features(lat, lon, sqft, beds, baths, scaler)
+        features = extract_live_features(lat, lon, sqft, beds, baths)
 
         with torch.no_grad():
             base_pred = model(features).numpy().reshape(-1)[0]
