@@ -136,23 +136,24 @@ def compute_shap_explanations(features, state):
     model = state["model"]
 
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
-    shap_vals = np.array(explainer.shap_values(features)).flatten()
+    
+    shap_vals = explainer.shap_values(features)
 
-    # Total importance
+    # ✅ Fix shape issue
+    if isinstance(shap_vals, list):
+        shap_vals = shap_vals[0]
+
+    shap_vals = shap_vals.flatten()
+
+    # Safety check
+    if len(shap_vals) == 0:
+        return pd.DataFrame({"Feature": ["No data"], "Impact %": [0], "Effect": ["None"]})
+
     total = np.sum(np.abs(shap_vals)) + 1e-8
 
-    # 🔥 Generate dynamic feature names
-    feature_names = []
+    # ✅ Generate feature names dynamically
+    feature_names = [f"Feature {i}" for i in range(len(shap_vals))]
 
-    for i in range(len(shap_vals)):
-        if i < 125:
-            feature_names.append(f"Tabular Feature {i}")
-        elif i < 2560:
-            feature_names.append(f"Image Feature {i}")
-        else:
-            feature_names.append(f"Derived Feature {i}")
-
-    # Convert to dataframe
     data = []
     for name, val in zip(feature_names, shap_vals):
         pct = (abs(val) / total) * 100
@@ -166,7 +167,7 @@ def compute_shap_explanations(features, state):
 
     df = pd.DataFrame(data)
 
-    # 🔥 Show TOP 50 features only
+    # ✅ Sort + top 50
     df = df.sort_values(by="Impact %", ascending=False).head(50)
 
     # Round values
@@ -211,16 +212,23 @@ with c1:
 
         shap_df = compute_shap_explanations(features, APP_STATE)
 
-        chart = alt.Chart(shap_df).mark_bar().encode(
-    x='Impact %',
-    y=alt.Y('Feature', sort='-x'),
-    color=alt.condition(
-        alt.datum.Effect == "Increase ↑",
-        alt.value("green"),
-        alt.value("red")
-    ),
-    tooltip=["Feature", "Impact %", "Effect"]
-).properties(height=1000)
+        shap_df = compute_shap_explanations(features, APP_STATE)
+
+if shap_df.empty:
+    st.warning("No feature importance data available")
+else:
+    chart = alt.Chart(shap_df).mark_bar().encode(
+        x='Impact %',
+        y=alt.Y('Feature', sort='-x'),
+        color=alt.condition(
+            alt.datum.Effect == "Increase ↑",
+            alt.value("green"),
+            alt.value("red")
+        ),
+        tooltip=["Feature", "Impact %", "Effect"]
+    ).properties(height=1000)
+
+    st.altair_chart(chart, use_container_width=True)
     
 with c2:
     st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=12)
