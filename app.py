@@ -186,39 +186,39 @@ with c1:
     lat = st.number_input("Latitude", value=19.0760)
     lon = st.number_input("Longitude", value=72.8777)
 
-   if st.button("Predict Market Value"):
+    if st.button("Predict Market Value"):
 
-    features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
+        features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
 
-    model = APP_STATE["model"]
-    rl_agent = APP_STATE["rl_agent"]
+        model = APP_STATE["model"]
+        rl_agent = APP_STATE["rl_agent"]
 
-    with torch.no_grad():
-        base_pred = model(features).numpy().reshape(-1)[0]
+        with torch.no_grad():
+            base_pred = model(features).numpy().reshape(-1)[0]
 
-    gnn_val = estimate_gnn_price(lat, lon)
-    market = scrape_market_trends()
+        gnn_val = estimate_gnn_price(lat, lon)
+        market = scrape_market_trends()
 
-    tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
-    final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
+        tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
+        final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
 
-    st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
-    st.info(f"Zone: {zone}")
+        st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
+        st.info(f"Zone: {zone}")
 
-    shap_df = compute_shap_explanations(features, APP_STATE)
+        shap_df = compute_shap_explanations(features, APP_STATE)
 
-    chart = alt.Chart(shap_df).mark_bar().encode(
-        x='Impact %',
-        y=alt.Y('Feature', sort='-x'),
-        color=alt.condition(
-            alt.datum.Effect == "Increase ↑",
-            alt.value("green"),
-            alt.value("red")
-        ),
-        tooltip=["Feature", "Impact %", "Effect"]
-    )
+        chart = alt.Chart(shap_df).mark_bar().encode(
+            x='Impact %',
+            y=alt.Y('Feature', sort='-x'),
+            color=alt.condition(
+                alt.datum.Effect == "Increase ↑",
+                alt.value("green"),
+                alt.value("red")
+            ),
+            tooltip=["Feature", "Impact %", "Effect"]
+        )
 
-    st.altair_chart(chart, use_container_width=True)
+        st.altair_chart(chart, use_container_width=True)
     
 with c2:
     st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=12)
