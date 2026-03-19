@@ -81,8 +81,7 @@ def calculate_indian_tiered_valuation(lat, lon, sqft, raw_nn_output):
     price_per_acre = min_p + (urban_intensity * (max_p - min_p))
     return price_per_acre * acre_factor, zone
 
-
-def extract_live_features(lat, lon, sqft, beds, baths, scaler):
+def extract_live_features(lat, lon, sqft, beds, baths):
 
     sat = get_image_features(lat, lon, style="satellite-v9")
     street = get_image_features(lat, lon, style="streets-v11")
