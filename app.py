@@ -138,7 +138,6 @@ def compute_shap_explanations(features, state):
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
     shap_vals = explainer.shap_values(features)
 
-    # Fix shape
     if isinstance(shap_vals, list):
         shap_vals = shap_vals[0]
 
@@ -146,7 +145,7 @@ def compute_shap_explanations(features, state):
 
     total = np.sum(np.abs(shap_vals)) + 1e-8
 
-    # ✅ Properly indented feature naming
+    # ✅ CORRECT INDENTATION STARTS HERE
     feature_names = []
 
     for i in range(len(shap_vals)):
@@ -161,29 +160,39 @@ def compute_shap_explanations(features, state):
             feature_names.append("Bedrooms Capacity")
         elif i == 4:
             feature_names.append("Bathrooms Utility")
-        elif i == 5:
-            feature_names.append("Market Time Factor")
-        elif i == 6:
-            feature_names.append("Location Encoding Score")
 
         elif i < 125:
-            feature_names.append("Derived Property Signal")
+            feature_names.append(f"Derived Property Signal #{i}")
 
         elif i < 1500:
-            feature_names.append("Road Density Pattern")
+            feature_names.append(f"Road Density Pattern #{i}")
         elif i < 2000:
-            feature_names.append("Building Structure Quality")
+            feature_names.append(f"Building Structure Quality #{i}")
         elif i < 2300:
-            feature_names.append("Neighborhood Layout Pattern")
+            feature_names.append(f"Neighborhood Layout Pattern #{i}")
         elif i < 2560:
-            feature_names.append("Urban Development Intensity")
+            feature_names.append(f"Urban Development Intensity #{i}")
 
         elif i < 2650:
-            feature_names.append("GNN Neighbor Price Influence")
-        elif i < 2700:
-            feature_names.append("Cluster Pricing Effect")
+            feature_names.append(f"GNN Neighbor Influence #{i}")
         else:
-            feature_names.append("Reinforcement Market Adjustment")
+            feature_names.append(f"Market Adjustment Signal #{i}")
+
+    data = []
+    for name, val in zip(feature_names, shap_vals):
+        pct = (abs(val) / total) * 100
+        direction = "Increase ↑" if val > 0 else "Decrease ↓"
+
+        data.append({
+            "Feature": name,
+            "Impact %": round(pct, 2),
+            "Effect": direction
+        })
+
+    df = pd.DataFrame(data)
+    df = df.sort_values(by="Impact %", ascending=False).head(50)
+
+    return df
 
     # Build dataframe
     data = []
@@ -199,8 +208,10 @@ def compute_shap_explanations(features, state):
 
     df = pd.DataFrame(data)
 
+    df = df.groupby(["Feature", "Effect"], as_index=False)["Impact %"].sum()
     df = df.sort_values(by="Impact %", ascending=False).head(50)
 
+    
     return df
 
 # ================================
@@ -239,15 +250,6 @@ with c1:
 
     shap_df = compute_shap_explanations(features, APP_STATE)
 
-    # Top 5
-    top5 = shap_df.head(5)
-
-    st.markdown("### 🔍 Top Factors Influencing Price")
-    for _, row in top5.iterrows():
-        arrow = "⬆️" if "Increase" in row["Effect"] else "⬇️"
-        st.write(f"{arrow} **{row['Feature']}** → {row['Impact %']}%")
-
-    # Chart
     if shap_df.empty:
         st.warning("No feature importance data available")
     else:
@@ -264,7 +266,6 @@ with c1:
 
         st.altair_chart(chart, use_container_width=True)
 
-    # Explanation
     st.markdown("### 🧾 Why this price?")
 
     top_positive = shap_df[shap_df["Effect"] == "Increase ↑"].head(2)
