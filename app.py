@@ -218,7 +218,7 @@ with c1:
     lat = st.number_input("Latitude", value=19.0760)
     lon = st.number_input("Longitude", value=72.8777)
 
-    if st.button("Predict Market Value"):
+   if st.button("Predict Market Value"):
 
     features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
 
@@ -237,10 +237,9 @@ with c1:
     st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
     st.info(f"Zone: {zone}")
 
-    # ✅ CREATE shap_df HERE
     shap_df = compute_shap_explanations(features, APP_STATE)
 
-    # ✅ TOP 5 (must be inside)
+    # Top 5
     top5 = shap_df.head(5)
 
     st.markdown("### 🔍 Top Factors Influencing Price")
@@ -248,7 +247,7 @@ with c1:
         arrow = "⬆️" if "Increase" in row["Effect"] else "⬇️"
         st.write(f"{arrow} **{row['Feature']}** → {row['Impact %']}%")
 
-    # ✅ Chart
+    # Chart
     if shap_df.empty:
         st.warning("No feature importance data available")
     else:
@@ -265,7 +264,7 @@ with c1:
 
         st.altair_chart(chart, use_container_width=True)
 
-    # ✅ Explanation block
+    # Explanation
     st.markdown("### 🧾 Why this price?")
 
     top_positive = shap_df[shap_df["Effect"] == "Increase ↑"].head(2)
