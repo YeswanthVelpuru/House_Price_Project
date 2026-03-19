@@ -128,9 +128,6 @@ def extract_live_features(lat, lon, sqft, beds, baths, state):
     return torch.tensor(scaler.transform(full_features), dtype=torch.float32)
 
 
-# ================================
-# SHAP
-# ================================
 def compute_shap_explanations(features, state):
 
     model = state["model"]
@@ -145,38 +142,37 @@ def compute_shap_explanations(features, state):
 
     total = np.sum(np.abs(shap_vals)) + 1e-8
 
-    # ✅ CORRECT INDENTATION STARTS HERE
     feature_names = []
 
     for i in range(len(shap_vals)):
 
         if i == 0:
-            feature_names.append("Latitude (Location Influence)")
+            feature_names.append("Location")
         elif i == 1:
-            feature_names.append("Longitude (Location Influence)")
+            feature_names.append("Location")
         elif i == 2:
-            feature_names.append("Property Size (sqft)")
+            feature_names.append("Property Size")
         elif i == 3:
-            feature_names.append("Bedrooms Capacity")
+            feature_names.append("Bedrooms")
         elif i == 4:
-            feature_names.append("Bathrooms Utility")
+            feature_names.append("Bathrooms")
 
         elif i < 125:
-            feature_names.append(f"Derived Property Signal #{i}")
+            feature_names.append("Property Features")
 
         elif i < 1500:
-            feature_names.append(f"Road Density Pattern #{i}")
+            feature_names.append("Road & Infrastructure")
         elif i < 2000:
-            feature_names.append(f"Building Structure Quality #{i}")
+            feature_names.append("Building Quality")
         elif i < 2300:
-            feature_names.append(f"Neighborhood Layout Pattern #{i}")
+            feature_names.append("Neighborhood Features")
         elif i < 2560:
-            feature_names.append(f"Urban Development Intensity #{i}")
+            feature_names.append("Urban Density")
 
         elif i < 2650:
-            feature_names.append(f"GNN Neighbor Influence #{i}")
+            feature_names.append("Market Influence (GNN)")
         else:
-            feature_names.append(f"Market Adjustment Signal #{i}")
+            feature_names.append("AI Pricing Signals")
 
     data = []
     for name, val in zip(feature_names, shap_vals):
@@ -190,9 +186,12 @@ def compute_shap_explanations(features, state):
         })
 
     df = pd.DataFrame(data)
-    df = df.sort_values(by="Impact %", ascending=False).head(50)
 
-    return df
+    # 🔥 GROUPING (clean UI)
+    df = df.groupby(["Feature", "Effect"], as_index=False)["Impact %"].sum()
+    df = df.sort_values(by="Impact %", ascending=False)
+
+    return df.head(10)
 
     # Build dataframe
     data = []
@@ -229,57 +228,69 @@ with c1:
     lat = st.number_input("Latitude", value=19.0760)
     lon = st.number_input("Longitude", value=72.8777)
 
-   if st.button("Predict Market Value"):
+    if st.button("Predict Market Value"):
 
-    features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
+        features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
 
-    model = APP_STATE["model"]
-    rl_agent = APP_STATE["rl_agent"]
+        model = APP_STATE["model"]
+        rl_agent = APP_STATE["rl_agent"]
 
-    with torch.no_grad():
-        base_pred = model(features).numpy().reshape(-1)[0]
+        with torch.no_grad():
+            base_pred = model(features).numpy().reshape(-1)[0]
 
-    gnn_val = estimate_gnn_price(lat, lon)
-    market = scrape_market_trends()
+        gnn_val = estimate_gnn_price(lat, lon)
+        market = scrape_market_trends()
 
-    tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
-    final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
+        tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
+        final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
 
-    st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
-    st.info(f"Zone: {zone}")
+        st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
+        st.info(f"Zone: {zone}")
 
-    shap_df = compute_shap_explanations(features, APP_STATE)
+        shap_df = compute_shap_explanations(features, APP_STATE)
 
-    if shap_df.empty:
-        st.warning("No feature importance data available")
+        if shap_df.empty:
+            st.warning("No feature importance data available")
+        else:
+            chart = alt.Chart(grouped_df).mark_bar(size=30).encode(
+    x=alt.X('Impact %', title="Contribution (%)"),
+    y=alt.Y('Group', sort='-x', title="Key Factors"),
+    color=alt.condition(
+        alt.datum.Effect == "Increase ↑",
+        alt.value("#2ecc71"),  # green
+        alt.value("#e74c3c")   # red
+    ),
+    tooltip=["Group", "Impact %", "Effect"]
+).properties(
+    height=400,
+    title="📊 Key Drivers of Property Price"
+)
+
+st.altair_chart(chart, use_container_width=True)
+
+        st.markdown("### 💡 Key Insights")
+
+top_groups = grouped_df.head(3)
+
+for _, row in top_groups.iterrows():
+    if "Increase" in row["Effect"]:
+        st.success(f"⬆️ {row['Group']} is boosting price by {row['Impact %']}%")
     else:
-        chart = alt.Chart(shap_df).mark_bar().encode(
-            x='Impact %',
-            y=alt.Y('Feature', sort='-x'),
-            color=alt.condition(
-                alt.datum.Effect == "Increase ↑",
-                alt.value("green"),
-                alt.value("red")
-            ),
-            tooltip=["Feature", "Impact %", "Effect"]
-        ).properties(height=1000)
+        st.error(f"⬇️ {row['Group']} is reducing price by {row['Impact %']}%")
 
-        st.altair_chart(chart, use_container_width=True)
+        st.markdown("### 🧾 Smart Price Explanation")
 
-    st.markdown("### 🧾 Why this price?")
+positive = grouped_df[grouped_df["Effect"] == "Increase ↑"].head(2)
+negative = grouped_df[grouped_df["Effect"] == "Decrease ↓"].head(2)
 
-    top_positive = shap_df[shap_df["Effect"] == "Increase ↑"].head(2)
-    top_negative = shap_df[shap_df["Effect"] == "Decrease ↓"].head(2)
+text = "This property valuation is primarily driven by "
 
-    explanation = "The estimated property price is influenced by multiple factors. "
+if not positive.empty:
+    text += ", ".join(positive["Group"].tolist())
 
-    if not top_positive.empty:
-        explanation += "Key factors increasing the value include "
-        explanation += ", ".join(top_positive["Feature"].tolist()) + ". "
+if not negative.empty:
+    text += ", while factors like "
+    text += ", ".join(negative["Group"].tolist())
+    text += " slightly reduce the overall price."
 
-    if not top_negative.empty:
-        explanation += "However, factors such as "
-        explanation += ", ".join(top_negative["Feature"].tolist())
-        explanation += " are slightly reducing the price."
-
-    st.info(explanation)
+st.info(text)
