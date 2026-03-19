@@ -220,68 +220,66 @@ with c1:
 
     if st.button("Predict Market Value"):
 
-        features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
+    features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
 
-        model = APP_STATE["model"]
-        rl_agent = APP_STATE["rl_agent"]
+    model = APP_STATE["model"]
+    rl_agent = APP_STATE["rl_agent"]
 
-        with torch.no_grad():
-            base_pred = model(features).numpy().reshape(-1)[0]
+    with torch.no_grad():
+        base_pred = model(features).numpy().reshape(-1)[0]
 
-        gnn_val = estimate_gnn_price(lat, lon)
-        market = scrape_market_trends()
+    gnn_val = estimate_gnn_price(lat, lon)
+    market = scrape_market_trends()
 
-        tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
-        final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
+    tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
+    final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
 
-        st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
-        st.info(f"Zone: {zone}")
+    st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
+    st.info(f"Zone: {zone}")
 
-        shap_df = compute_shap_explanations(features, APP_STATE)
+    # ✅ CREATE shap_df HERE
+    shap_df = compute_shap_explanations(features, APP_STATE)
 
-        shap_df = compute_shap_explanations(features, APP_STATE)
+    # ✅ TOP 5 (must be inside)
+    top5 = shap_df.head(5)
 
-top5 = shap_df.head(5)
+    st.markdown("### 🔍 Top Factors Influencing Price")
+    for _, row in top5.iterrows():
+        arrow = "⬆️" if "Increase" in row["Effect"] else "⬇️"
+        st.write(f"{arrow} **{row['Feature']}** → {row['Impact %']}%")
 
-st.markdown("### 🔍 Top Factors Influencing Price")
+    # ✅ Chart
+    if shap_df.empty:
+        st.warning("No feature importance data available")
+    else:
+        chart = alt.Chart(shap_df).mark_bar().encode(
+            x='Impact %',
+            y=alt.Y('Feature', sort='-x'),
+            color=alt.condition(
+                alt.datum.Effect == "Increase ↑",
+                alt.value("green"),
+                alt.value("red")
+            ),
+            tooltip=["Feature", "Impact %", "Effect"]
+        ).properties(height=1000)
 
-for _, row in top5.iterrows():
-    arrow = "⬆️" if "Increase" in row["Effect"] else "⬇️"
-    st.write(f"{arrow} **{row['Feature']}** → {row['Impact %']}%")
+        st.altair_chart(chart, use_container_width=True)
 
-if shap_df.empty:
-    st.warning("No feature importance data available")
-else:
-    chart = alt.Chart(shap_df).mark_bar().encode(
-        x='Impact %',
-        y=alt.Y('Feature', sort='-x'),
-        color=alt.condition(
-            alt.datum.Effect == "Increase ↑",
-            alt.value("green"),
-            alt.value("red")
-        ),
-        tooltip=["Feature", "Impact %", "Effect"]
-    ).properties(height=1000)
-
-    st.altair_chart(chart, use_container_width=True)
-    
-with c2:
-    st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=12)
-
+    # ✅ Explanation block
     st.markdown("### 🧾 Why this price?")
 
-top_positive = shap_df[shap_df["Effect"] == "Increase ↑"].head(2)
-top_negative = shap_df[shap_df["Effect"] == "Decrease ↓"].head(2)
+    top_positive = shap_df[shap_df["Effect"] == "Increase ↑"].head(2)
+    top_negative = shap_df[shap_df["Effect"] == "Decrease ↓"].head(2)
 
-explanation = "The estimated property price is influenced by multiple factors. "
+    explanation = "The estimated property price is influenced by multiple factors. "
 
-if not top_positive.empty:
-    explanation += "Key factors increasing the value include "
-    explanation += ", ".join(top_positive["Feature"].tolist()) + ". "
+    if not top_positive.empty:
+        explanation += "Key factors increasing the value include "
+        explanation += ", ".join(top_positive["Feature"].tolist()) + ". "
 
-if not top_negative.empty:
-    explanation += "However, certain factors such as "
-    explanation += ", ".join(top_negative["Feature"].tolist())
-    explanation += " are slightly reducing the price."
+    if not top_negative.empty:
+        explanation += "However, factors such as "
+        explanation += ", ".join(top_negative["Feature"].tolist())
+        explanation += " are slightly reducing the price."
 
-st.info(explanation)
+    st.info(explanation)
