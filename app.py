@@ -16,6 +16,9 @@ from rl_price_trend import RLPriceAgent
 from model_training import HousePricePredictor
 
 
+# ================================
+# PATHS
+# ================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 ARTIFACTS_PATH = os.path.join(BASE_DIR, "artifacts.pkl")
@@ -23,6 +26,9 @@ MODEL_PATH = os.path.join(BASE_DIR, "house_price_model.pth")
 SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
 
+# ================================
+# LOAD MODELS
+# ================================
 @st.cache_resource
 def load_models():
 
@@ -31,19 +37,16 @@ def load_models():
             st.error(f"❌ Missing file: {name} at {path}")
             st.stop()
 
-    # Validate files
     check_file(ARTIFACTS_PATH, "artifacts.pkl")
     check_file(SCALER_PATH, "scaler.pkl")
     check_file(MODEL_PATH, "house_price_model.pth")
 
-    # Load artifacts
     with open(ARTIFACTS_PATH, "rb") as f:
         artifacts = pickle.load(f)
 
     with open(SCALER_PATH, "rb") as f:
         scaler = pickle.load(f)
 
-    # Load model
     model = HousePricePredictor(input_dim=2685, image_dim=2560)
     model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
     model.eval()
@@ -53,6 +56,22 @@ def load_models():
     return artifacts, scaler, model, rl_agent
 
 
+# ================================
+# 🔥 STATE LAYER
+# ================================
+artifacts, scaler, model, rl_agent = load_models()
+
+APP_STATE = {
+    "artifacts": artifacts,
+    "scaler": scaler,
+    "model": model,
+    "rl_agent": rl_agent
+}
+
+
+# ================================
+# PRICING
+# ================================
 def calculate_indian_tiered_valuation(lat, lon, sqft, raw_nn_output):
 
     acre_factor = sqft / 43560.0
@@ -81,7 +100,13 @@ def calculate_indian_tiered_valuation(lat, lon, sqft, raw_nn_output):
     price_per_acre = min_p + (urban_intensity * (max_p - min_p))
     return price_per_acre * acre_factor, zone
 
-def extract_live_features(lat, lon, sqft, beds, baths):
+
+# ================================
+# FEATURE EXTRACTION
+# ================================
+def extract_live_features(lat, lon, sqft, beds, baths, state):
+
+    scaler = state["scaler"]
 
     sat = get_image_features(lat, lon, style="satellite-v9")
     street = get_image_features(lat, lon, style="streets-v11")
@@ -103,12 +128,15 @@ def extract_live_features(lat, lon, sqft, beds, baths):
     return torch.tensor(scaler.transform(full_features), dtype=torch.float32)
 
 
+# ================================
+# SHAP
+# ================================
+def compute_shap_explanations(features, state):
 
-def compute_shap_explanations(features, model):
+    model = state["model"]
 
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
     shap_vals = np.abs(np.array(explainer.shap_values(features))).flatten()
-    total_imp = np.sum(shap_vals)
 
     return pd.DataFrame({
         "Feature": [f"Feature {i}" for i in range(50)],
@@ -116,6 +144,9 @@ def compute_shap_explanations(features, model):
     })
 
 
+# ================================
+# UI
+# ================================
 st.title("Multimodal Geo-Spatial Price Prediction Framework")
 
 c1, c2 = st.columns([1, 1.2])
@@ -130,7 +161,10 @@ with c1:
 
     if st.button("Predict Market Value"):
 
-        features = extract_live_features(lat, lon, sqft, beds, baths)
+        features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
+
+        model = APP_STATE["model"]
+        rl_agent = APP_STATE["rl_agent"]
 
         with torch.no_grad():
             base_pred = model(features).numpy().reshape(-1)[0]
@@ -144,7 +178,7 @@ with c1:
         st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
         st.info(f"Zone: {zone}")
 
-        shap_df = compute_shap_explanations(features, model)
+        shap_df = compute_shap_explanations(features, APP_STATE)
 
         chart = alt.Chart(shap_df).mark_bar().encode(
             x='Impact',
