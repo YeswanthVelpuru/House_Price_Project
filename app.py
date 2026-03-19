@@ -136,73 +136,73 @@ def compute_shap_explanations(features, state):
     model = state["model"]
 
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
-    
     shap_vals = explainer.shap_values(features)
 
-    # ✅ Fix shape issue
+    # Fix shape
     if isinstance(shap_vals, list):
         shap_vals = shap_vals[0]
 
     shap_vals = shap_vals.flatten()
 
-    # Safety check
-    if len(shap_vals) == 0:
-        return pd.DataFrame({"Feature": ["No data"], "Impact %": [0], "Effect": ["None"]})
-
     total = np.sum(np.abs(shap_vals)) + 1e-8
 
-    # ✅ Generate feature names dynamically
-  feature_names = []
+    # ✅ Properly indented feature naming
+    feature_names = []
 
-for i in range(len(shap_vals)):
+    for i in range(len(shap_vals)):
 
-    # Core tabular features
-    if i == 0:
-        feature_names.append("Latitude (Location Influence)")
-    elif i == 1:
-        feature_names.append("Longitude (Location Influence)")
-    elif i == 2:
-        feature_names.append("Property Size (sqft)")
-    elif i == 3:
-        feature_names.append("Bedrooms Capacity")
-    elif i == 4:
-        feature_names.append("Bathrooms Utility")
-    elif i == 5:
-        feature_names.append("Market Time Factor")
-    elif i == 6:
-        feature_names.append("Location Encoding Score")
+        if i == 0:
+            feature_names.append("Latitude (Location Influence)")
+        elif i == 1:
+            feature_names.append("Longitude (Location Influence)")
+        elif i == 2:
+            feature_names.append("Property Size (sqft)")
+        elif i == 3:
+            feature_names.append("Bedrooms Capacity")
+        elif i == 4:
+            feature_names.append("Bathrooms Utility")
+        elif i == 5:
+            feature_names.append("Market Time Factor")
+        elif i == 6:
+            feature_names.append("Location Encoding Score")
 
-    # Remaining tabular
-    elif i < 125:
-        feature_names.append("Derived Property Signal")
+        elif i < 125:
+            feature_names.append("Derived Property Signal")
 
-    # Image features → HUMAN LABELS
-    elif i < 1500:
-        feature_names.append("Road Density Pattern")
-    elif i < 2000:
-        feature_names.append("Building Structure Quality")
-    elif i < 2300:
-        feature_names.append("Neighborhood Layout Pattern")
-    elif i < 2560:
-        feature_names.append("Urban Development Intensity")
+        elif i < 1500:
+            feature_names.append("Road Density Pattern")
+        elif i < 2000:
+            feature_names.append("Building Structure Quality")
+        elif i < 2300:
+            feature_names.append("Neighborhood Layout Pattern")
+        elif i < 2560:
+            feature_names.append("Urban Development Intensity")
 
-    # Advanced AI features
-    elif i < 2650:
-        feature_names.append("GNN Neighbor Price Influence")
-    elif i < 2700:
-        feature_names.append("Cluster Pricing Effect")
-    else:
-        feature_names.append("Reinforcement Market Adjustment")
+        elif i < 2650:
+            feature_names.append("GNN Neighbor Price Influence")
+        elif i < 2700:
+            feature_names.append("Cluster Pricing Effect")
+        else:
+            feature_names.append("Reinforcement Market Adjustment")
 
-    # ✅ Sort + top 50
+    # Build dataframe
+    data = []
+    for name, val in zip(feature_names, shap_vals):
+        pct = (abs(val) / total) * 100
+        direction = "Increase ↑" if val > 0 else "Decrease ↓"
+
+        data.append({
+            "Feature": name,
+            "Impact %": round(pct, 2),
+            "Effect": direction
+        })
+
+    df = pd.DataFrame(data)
+
     df = df.sort_values(by="Impact %", ascending=False).head(50)
-
-    # Round values
-    df["Impact %"] = df["Impact %"].round(2)
 
     return df
 
-    
 # ================================
 # UI
 # ================================
