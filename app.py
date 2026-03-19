@@ -138,39 +138,43 @@ def compute_shap_explanations(features, state):
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
     shap_vals = np.array(explainer.shap_values(features)).flatten()
 
-    # Total absolute importance
+    # Total importance
     total = np.sum(np.abs(shap_vals)) + 1e-8
 
-    # Feature names (same as before)
-    feature_names = [
-        "Property Size (sqft)", "Bedrooms", "Bathrooms", "Property Age", "Floor Level", "Parking",
-        "Latitude", "Longitude", "Distance to City Center", "Distance to Metro", "Distance to Airport",
-        "Nearby Schools", "Nearby Hospitals", "Nearby Malls", "Nearby Restaurants", "Nearby Parks",
-        "Road Connectivity", "Traffic Density", "Public Transport", "Urban Index",
-        "Greenery Score", "Air Quality", "Water Proximity", "Noise Level",
-        "Building Quality", "Street Condition", "Neighborhood Aesthetics", "Urban Density", "Road Layout",
-        "Market Demand", "Price Trend", "Economic Activity",
-        "GNN Neighbor Price", "Cluster Effect", "RL Adjustment"
-    ]
+    # 🔥 Generate dynamic feature names
+    feature_names = []
 
-    shap_vals = shap_vals[:len(feature_names)]
+    for i in range(len(shap_vals)):
+        if i < 125:
+            feature_names.append(f"Tabular Feature {i}")
+        elif i < 2560:
+            feature_names.append(f"Image Feature {i}")
+        else:
+            feature_names.append(f"Derived Feature {i}")
 
+    # Convert to dataframe
     data = []
     for name, val in zip(feature_names, shap_vals):
         pct = (abs(val) / total) * 100
-
         direction = "Increase ↑" if val > 0 else "Decrease ↓"
 
         data.append({
             "Feature": name,
-            "Impact %": round(pct, 2),
+            "Impact %": pct,
             "Effect": direction
         })
 
-    df = pd.DataFrame(data).sort_values(by="Impact %", ascending=False)
+    df = pd.DataFrame(data)
+
+    # 🔥 Show TOP 50 features only
+    df = df.sort_values(by="Impact %", ascending=False).head(50)
+
+    # Round values
+    df["Impact %"] = df["Impact %"].round(2)
 
     return df
 
+    
 # ================================
 # UI
 # ================================
@@ -208,17 +212,15 @@ with c1:
         shap_df = compute_shap_explanations(features, APP_STATE)
 
         chart = alt.Chart(shap_df).mark_bar().encode(
-            x='Impact %',
-            y=alt.Y('Feature', sort='-x'),
-            color=alt.condition(
-                alt.datum.Effect == "Increase ↑",
-                alt.value("green"),
-                alt.value("red")
-            ),
-            tooltip=["Feature", "Impact %", "Effect"]
-        )
-
-        st.altair_chart(chart, use_container_width=True)
+    x='Impact %',
+    y=alt.Y('Feature', sort='-x'),
+    color=alt.condition(
+        alt.datum.Effect == "Increase ↑",
+        alt.value("green"),
+        alt.value("red")
+    ),
+    tooltip=["Feature", "Impact %", "Effect"]
+).properties(height=1000)
     
 with c2:
     st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=12)
