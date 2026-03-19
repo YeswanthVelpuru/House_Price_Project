@@ -22,8 +22,6 @@ ARTIFACTS_PATH = os.path.join(BASE_DIR, "artifacts.pkl")
 MODEL_PATH = os.path.join(BASE_DIR, "house_price_model.pth")
 SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
 
-st.write("📁 Current Directory:", os.getcwd())
-st.write("📂 Root Files:", os.listdir(BASE_DIR))
 
 @st.cache_resource
 def load_models():
