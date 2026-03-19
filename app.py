@@ -136,69 +136,38 @@ def compute_shap_explanations(features, state):
     model = state["model"]
 
     explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
-    shap_vals = np.abs(np.array(explainer.shap_values(features))).flatten()
+    shap_vals = np.array(explainer.shap_values(features)).flatten()
 
-    # 🎯 Human-readable features (grouped)
+    # Total absolute importance
+    total = np.sum(np.abs(shap_vals)) + 1e-8
+
+    # Feature names (same as before)
     feature_names = [
-        # PROPERTY FEATURES
-        "Property Size (sqft)",
-        "Number of Bedrooms",
-        "Number of Bathrooms",
-        "Property Age",
-        "Floor Level",
-        "Parking Availability",
-
-        # LOCATION FEATURES
-        "Latitude Impact",
-        "Longitude Impact",
-        "Distance to City Center",
-        "Distance to Metro",
-        "Distance to Airport",
-
-        # NEIGHBORHOOD FEATURES
-        "Nearby Schools",
-        "Nearby Hospitals",
-        "Nearby Malls",
-        "Nearby Restaurants",
-        "Nearby Parks",
-
-        # INFRASTRUCTURE
-        "Road Connectivity",
-        "Traffic Density",
-        "Public Transport Access",
-        "Urban Development Index",
-
-        # ENVIRONMENT
-        "Greenery Score",
-        "Air Quality",
-        "Water Proximity",
-        "Noise Level",
-
-        # IMAGE FEATURES (CNN ABSTRACTED)
-        "Building Quality (Vision AI)",
-        "Street Condition",
-        "Neighborhood Aesthetics",
-        "Urban Density (Satellite)",
-        "Road Layout Quality",
-
-        # MARKET SIGNALS
-        "Market Demand Index",
-        "Price Trend",
-        "Economic Activity",
-
-        # ADVANCED MODELS
-        "GNN Neighbor Price Influence",
-        "Cluster Pricing Effect",
-        "Reinforcement Learning Adjustment"
+        "Property Size (sqft)", "Bedrooms", "Bathrooms", "Property Age", "Floor Level", "Parking",
+        "Latitude", "Longitude", "Distance to City Center", "Distance to Metro", "Distance to Airport",
+        "Nearby Schools", "Nearby Hospitals", "Nearby Malls", "Nearby Restaurants", "Nearby Parks",
+        "Road Connectivity", "Traffic Density", "Public Transport", "Urban Index",
+        "Greenery Score", "Air Quality", "Water Proximity", "Noise Level",
+        "Building Quality", "Street Condition", "Neighborhood Aesthetics", "Urban Density", "Road Layout",
+        "Market Demand", "Price Trend", "Economic Activity",
+        "GNN Neighbor Price", "Cluster Effect", "RL Adjustment"
     ]
 
-    # Match length safely
     shap_vals = shap_vals[:len(feature_names)]
 
-    df = pd.DataFrame({
-        "Feature": feature_names,
-        "Impact": shap_vals
-    }).sort_values(by="Impact", ascending=False)
+    data = []
+    for name, val in zip(feature_names, shap_vals):
+        pct = (abs(val) / total) * 100
+
+        direction = "Increase ↑" if val > 0 else "Decrease ↓"
+
+        data.append({
+            "Feature": name,
+            "Impact %": round(pct, 2),
+            "Effect": direction
+        })
+
+    df = pd.DataFrame(data).sort_values(by="Impact %", ascending=False)
 
     return df
 
@@ -238,12 +207,16 @@ with c1:
 
         shap_df = compute_shap_explanations(features, APP_STATE)
 
-        chart = alt.Chart(shap_df).mark_bar().encode(
-            x='Impact',
-            y=alt.Y('Feature', sort='-x')
-        )
-
-        st.altair_chart(chart, use_container_width=True)
-
+       chart = alt.Chart(shap_df).mark_bar().encode(
+    x='Impact %',
+    y=alt.Y('Feature', sort='-x'),
+    color=alt.condition(
+        alt.datum.Effect == "Increase ↑",
+        alt.value("green"),
+        alt.value("red")
+    ),
+    tooltip=["Feature", "Impact %", "Effect"]
+)
+    
 with c2:
     st.map(pd.DataFrame({'lat': [lat], 'lon': [lon]}), zoom=12)
