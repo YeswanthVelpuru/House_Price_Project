@@ -1,23 +1,36 @@
-# image_features.py
-import numpy as np
 import torch
+import torch.nn as nn
+from torchvision import models, transforms
+from PIL import Image
+import numpy as np
 
-def get_image_features(lat, lon, style="satellite-v9"):
-    """
-    Fetches static map imagery and extracts CNN feature embeddings.
-    Note: Returns 1280 features per style to match the 2560 model requirement.
-    """
-    try:
-        # Generates a pseudo-random embedding based on coordinates for the demo
-        # Each call returns 1280 features
-        np.random.seed(int(abs(lat * lon)))
-        return np.random.randn(1280).astype(np.float32)
-    except Exception:
-        return np.zeros(1280).astype(np.float32)
+class VisualFeatureExtractor:
+    def __init__(self):
+        # Load pre-trained ResNet-18
+        resnet = models.resnet18(pretrained=True)
+        # Remove the last classification layer to get raw features (512-dim)
+        self.model = nn.Sequential(*list(resnet.children())[:-1])
+        self.model.eval()
+        
+        self.transform = transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
 
-def get_greenery_score(lat, lon):
-    """
-    Calculates the Greenery Index (Driver #31).
-    """
-    np.random.seed(int(abs(lat + lon)))
-    return float(np.clip(45.0 + np.random.uniform(-15, 35), 0, 100))
+    def extract(self, image_path):
+        """Converts an image file into a 512-dimensional feature vector."""
+        try:
+            img = Image.open(image_path).convert('RGB')
+            img_t = self.transform(img).unsqueeze(0)
+            with torch.no_grad():
+                features = self.model(img_t)
+            return features.flatten().numpy()
+        except Exception as e:
+            # Fallback to zero-vector if image fails
+            return np.zeros(512)
+
+if __name__ == "__main__":
+    extractor = VisualFeatureExtractor()
+    print("Vision Engine Initialized. Ready to process property photos.")

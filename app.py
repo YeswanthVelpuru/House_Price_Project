@@ -1,296 +1,55 @@
-import os
-import pickle
-import numpy as np
-import torch
 import streamlit as st
-import pandas as pd
+import torch
+import pickle
 import shap
-import geohash2
-from geopy.distance import geodesic
-import altair as alt
-
-from image_features import get_image_features
-from market_features import scrape_market_trends
-from graph_features import estimate_gnn_price
-from rl_price_trend import RLPriceAgent
+import numpy as np
+import matplotlib.pyplot as plt
 from model_training import HousePricePredictor
+from rl_price_trend import RLPriceAgent
+from market_features import scrape_market_trends
 
+# Step 9: Deployment Configuration
+st.set_page_config(page_title="Urban AI Valuation", layout="wide")
 
-# ================================
-# PATHS
-# ================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-ARTIFACTS_PATH = os.path.join(BASE_DIR, "artifacts.pkl")
-MODEL_PATH = os.path.join(BASE_DIR, "house_price_model.pth")
-SCALER_PATH = os.path.join(BASE_DIR, "scaler.pkl")
-
-
-# ================================
-# LOAD MODELS
-# ================================
 @st.cache_resource
-def load_models():
+def load_assets():
+    with open('scaler.pkl', 'rb') as f: sc = pickle.load(f)
+    m = HousePricePredictor(12)
+    m.load_state_dict(torch.load('house_price_model.pth'))
+    m.eval()
+    return sc, m
 
-    def check_file(path, name):
-        if not os.path.exists(path):
-            st.error(f"❌ Missing file: {name} at {path}")
-            st.stop()
+scaler, model = load_assets()
+monitor = RLPriceAgent()
 
-    check_file(ARTIFACTS_PATH, "artifacts.pkl")
-    check_file(SCALER_PATH, "scaler.pkl")
-    check_file(MODEL_PATH, "house_price_model.pth")
+st.title("🏡 Fine-Grained Urban AI Predictor")
 
-    with open(ARTIFACTS_PATH, "rb") as f:
-        artifacts = pickle.load(f)
+# Input simulation
+with st.sidebar:
+    st.header("Property Inputs")
+    sqft = st.number_input("Sqft Living", value=2000)
+    grade = st.slider("Grade", 1, 13, 7)
+    city = st.selectbox("City", ["Delhi", "Mumbai", "Hyderabad", "Visakhapatnam"])
 
-    with open(SCALER_PATH, "rb") as f:
-        scaler = pickle.load(f)
-
-    model = HousePricePredictor(input_dim=2685, image_dim=2560)
-    model.load_state_dict(torch.load(MODEL_PATH, map_location="cpu"))
-    model.eval()
-
-    rl_agent = RLPriceAgent()
-
-    return artifacts, scaler, model, rl_agent
-
-
-# ================================
-# 🔥 STATE LAYER
-# ================================
-artifacts, scaler, model, rl_agent = load_models()
-
-APP_STATE = {
-    "artifacts": artifacts,
-    "scaler": scaler,
-    "model": model,
-    "rl_agent": rl_agent
-}
-
-
-# ================================
-# PRICING
-# ================================
-def calculate_indian_tiered_valuation(lat, lon, sqft, raw_nn_output):
-
-    acre_factor = sqft / 43560.0
-
-    metros = {
-        "Mumbai": (19.0760, 72.8777),
-        "Delhi": (28.6139, 77.2090),
-        "Hyderabad": (17.385, 78.486),
-        "Bangalore": (12.971, 77.594),
-        "Chennai": (13.082, 80.270),
-        "Kolkata": (22.5726, 88.3639),
-    }
-
-    dist_to_metro = min([geodesic((lat, lon), m).km for m in metros.values()])
-    urban_intensity = np.clip(abs(raw_nn_output) / 1e6, 0.1, 1.0)
-
-    if dist_to_metro < 25 or urban_intensity > 0.8:
-        zone, min_p, max_p = "Metropolitan", 10e7, 130e7
-    elif dist_to_metro < 50 or urban_intensity > 0.5:
-        zone, min_p, max_p = "Urban", 2e7, 10e7
-    elif dist_to_metro < 80 or urban_intensity > 0.3:
-        zone, min_p, max_p = "Semi-Urban", 0.3e7, 1.5e7
-    else:
-        zone, min_p, max_p = "Rural Village", 0.1e7, 0.25e7
-
-    price_per_acre = min_p + (urban_intensity * (max_p - min_p))
-    return price_per_acre * acre_factor, zone
-
-
-# ================================
-# FEATURE EXTRACTION
-# ================================
-def extract_live_features(lat, lon, sqft, beds, baths, state):
-
-    scaler = state["scaler"]
-
-    sat = get_image_features(lat, lon, style="satellite-v9")
-    street = get_image_features(lat, lon, style="streets-v11")
-
-    image_block = np.hstack([sat, street])
-
-    gh = geohash2.encode(lat, lon, precision=6)
-    vals = [lat, lon, sqft, beds, baths, 2026, int(gh.encode().hex(), 16) % 100000]
-
-    tabular_vector = np.array(vals, dtype=np.float32)
-
-    if len(tabular_vector) > 125:
-        tabular_vector = tabular_vector[:125]
-    else:
-        tabular_vector = np.pad(tabular_vector, (0, 125 - len(tabular_vector)))
-
-    full_features = np.hstack([image_block, tabular_vector]).reshape(1, -1)
-
-    return torch.tensor(scaler.transform(full_features), dtype=torch.float32)
-
-
-def compute_shap_explanations(features, state):
-
-    model = state["model"]
-
-    explainer = shap.GradientExplainer(model, torch.zeros((5, features.shape[1])))
-    shap_vals = explainer.shap_values(features)
-
-    if isinstance(shap_vals, list):
-        shap_vals = shap_vals[0]
-
-    shap_vals = shap_vals.flatten()
-
-    total = np.sum(np.abs(shap_vals)) + 1e-8
-
-    feature_names = []
-
-    for i in range(len(shap_vals)):
-
-        if i == 0:
-            feature_names.append("Location")
-        elif i == 1:
-            feature_names.append("Location")
-        elif i == 2:
-            feature_names.append("Property Size")
-        elif i == 3:
-            feature_names.append("Bedrooms")
-        elif i == 4:
-            feature_names.append("Bathrooms")
-
-        elif i < 125:
-            feature_names.append("Property Features")
-
-        elif i < 1500:
-            feature_names.append("Road & Infrastructure")
-        elif i < 2000:
-            feature_names.append("Building Quality")
-        elif i < 2300:
-            feature_names.append("Neighborhood Features")
-        elif i < 2560:
-            feature_names.append("Urban Density")
-
-        elif i < 2650:
-            feature_names.append("Market Influence (GNN)")
-        else:
-            feature_names.append("AI Pricing Signals")
-
-    data = []
-    for name, val in zip(feature_names, shap_vals):
-        pct = (abs(val) / total) * 100
-        direction = "Increase ↑" if val > 0 else "Decrease ↓"
-
-        data.append({
-            "Feature": name,
-            "Impact %": round(pct, 2),
-            "Effect": direction
-        })
-
-    df = pd.DataFrame(data)
-
-    # 🔥 GROUPING (clean UI)
-    df = df.groupby(["Feature", "Effect"], as_index=False)["Impact %"].sum()
-    df = df.sort_values(by="Impact %", ascending=False)
-
-    return df.head(10)
-
-    # Build dataframe
-    data = []
-    for name, val in zip(feature_names, shap_vals):
-        pct = (abs(val) / total) * 100
-        direction = "Increase ↑" if val > 0 else "Decrease ↓"
-
-        data.append({
-            "Feature": name,
-            "Impact %": round(pct, 2),
-            "Effect": direction
-        })
-
-    df = pd.DataFrame(data)
-
-    df = df.groupby(["Feature", "Effect"], as_index=False)["Impact %"].sum()
-    df = df.sort_values(by="Impact %", ascending=False).head(50)
-
+if st.button("Predict Market Value"):
+    # Create raw input matching feature list
+    raw_input = np.array([[3, 2, sqft, 5000, 1, 0, 0, 3, grade, 2015, 17.38, 78.48]])
+    scaled_input = scaler.transform(raw_input)
     
-    return df
+    # Prediction
+    pred = model(torch.tensor(scaled_input, dtype=torch.float32)).item()
+    
+    # Step 7: Explain (SHAP)
+    st.subheader("🔍 Prediction Breakdown (SHAP)")
+    # We use a kernel explainer for the PyTorch model
+    explainer = shap.Explainer(lambda x: model(torch.tensor(x, dtype=torch.float32)).detach().numpy(), scaled_input)
+    shap_values = explainer(scaled_input)
+    
+    fig, ax = plt.subplots()
+    shap.plots.bar(shap_values[0], show=False)
+    st.pyplot(fig)
 
-# ================================
-# UI
-# ================================
-st.title("Multimodal Geo-Spatial Price Prediction Framework")
-
-c1, c2 = st.columns([1, 1.2])
-
-with c1:
-    sqft = st.slider("Area (sqft)", 500, 20000, 2000)
-    beds = st.slider("Bedrooms", 1, 12, 3)
-    baths = st.slider("Bathrooms", 1.0, 10.0, 2.0)
-
-    lat = st.number_input("Latitude", value=19.0760)
-    lon = st.number_input("Longitude", value=72.8777)
-
-    if st.button("Predict Market Value"):
-
-        features = extract_live_features(lat, lon, sqft, beds, baths, APP_STATE)
-
-        model = APP_STATE["model"]
-        rl_agent = APP_STATE["rl_agent"]
-
-        with torch.no_grad():
-            base_pred = model(features).numpy().reshape(-1)[0]
-
-        gnn_val = estimate_gnn_price(lat, lon)
-        market = scrape_market_trends()
-
-        tiered_price, zone = calculate_indian_tiered_valuation(lat, lon, sqft, base_pred)
-        final_price = rl_agent.adjust_price(tiered_price, market["demand_index"])
-
-        st.success(f"💰 Price: ₹{abs(final_price):,.2f}")
-        st.info(f"Zone: {zone}")
-
-        shap_df = compute_shap_explanations(features, APP_STATE)
-
-        if shap_df.empty:
-            st.warning("No feature importance data available")
-        else:
-            chart = alt.Chart(grouped_df).mark_bar(size=30).encode(
-    x=alt.X('Impact %', title="Contribution (%)"),
-    y=alt.Y('Group', sort='-x', title="Key Factors"),
-    color=alt.condition(
-        alt.datum.Effect == "Increase ↑",
-        alt.value("#2ecc71"),  # green
-        alt.value("#e74c3c")   # red
-    ),
-    tooltip=["Group", "Impact %", "Effect"]
-).properties(
-    height=400,
-    title="📊 Key Drivers of Property Price"
-)
-
-st.altair_chart(chart, use_container_width=True)
-
-        st.markdown("### 💡 Key Insights")
-
-top_groups = grouped_df.head(3)
-
-for _, row in top_groups.iterrows():
-    if "Increase" in row["Effect"]:
-        st.success(f"⬆️ {row['Group']} is boosting price by {row['Impact %']}%")
-    else:
-        st.error(f"⬇️ {row['Group']} is reducing price by {row['Impact %']}%")
-
-        st.markdown("### 🧾 Smart Price Explanation")
-
-positive = grouped_df[grouped_df["Effect"] == "Increase ↑"].head(2)
-negative = grouped_df[grouped_df["Effect"] == "Decrease ↓"].head(2)
-
-text = "This property valuation is primarily driven by "
-
-if not positive.empty:
-    text += ", ".join(positive["Group"].tolist())
-
-if not negative.empty:
-    text += ", while factors like "
-    text += ", ".join(negative["Group"].tolist())
-    text += " slightly reduce the overall price."
-
-st.info(text)
+    # Step 10: Monitoring
+    live_rate = scrape_market_trends(city)
+    drift = monitor.monitor_drift(pred/sqft, live_rate)
+    st.metric("Valuation", f"₹{pred:,.0f}", f"Drift: {drift}")

@@ -1,49 +1,55 @@
-# model_training.py
 import torch
 import torch.nn as nn
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import r2_score, mean_squared_error
+import numpy as np
+from data_processing import get_processed_data
 
+# Step 5: Define Deep Learning Architecture
 class HousePricePredictor(nn.Module):
-    """
-    Multimodal Architecture strictly aligned with the saved checkpoint.
-    Matches the specific 64-unit hidden layer in the regressor head.
-    """
-    def __init__(self, input_dim=2685, image_dim=2560):
-        super(HousePricePredictor, self).__init__()
-        
-        # Branch 1: Image Processing (img_net) - 2560 -> 512
-        self.img_net = nn.Sequential(
-            nn.Linear(2560, 512),
-            nn.ReLU(),
-            nn.BatchNorm1d(512)
+    def __init__(self, input_dim):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(input_dim, 128), nn.ReLU(),
+            nn.Linear(128, 64), nn.ReLU(),
+            nn.Linear(64, 1)
         )
-        
-        # Branch 2: Tabular Processing (tab_net) - 125 -> 128
-        self.tab_net = nn.Sequential(
-            nn.Linear(125, 128),
-            nn.ReLU(),
-            nn.BatchNorm1d(128)
-        )
-        
-        # Branch 3: Regression Head (regressor)
-        # Combined input: 512 + 128 = 640
-        self.regressor = nn.Sequential(
-            nn.Linear(640, 256),    # Layer 0
-            nn.ReLU(),              # Layer 1
-            nn.Dropout(0.2),        # Layer 2
-            nn.Linear(256, 64),     # Layer 3: FIXED to 64 to match .pth
-            nn.ReLU(),              # Layer 4
-            nn.Linear(64, 1)        # Layer 5: FIXED to 64->1 to match .pth
-        )
-        
-    def forward(self, x):
-        # Input split: [0:2560] images, [2560:2685] tabular
-        img_features = x[:, :2560]
-        tab_features = x[:, 2560:2685]
-        
-        img_out = self.img_net(img_features)
-        tab_out = self.tab_net(tab_features)
-        
-        # Concatenate features
-        combined = torch.cat((img_out, tab_out), dim=1)
-        
-        return self.regressor(combined)
+    def forward(self, x): return self.net(x)
+
+def run_training():
+    # Load already scaled data from Phase 2/4
+    X_train, X_val, X_test, y_train, y_val, y_test, feat_names = get_processed_data()
+
+    # Step 3: Baseline (Random Forest)
+    rf = RandomForestRegressor(n_estimators=100, random_state=42)
+    rf.fit(X_train, y_train)
+    print(f"Baseline (RF) R2 Score: {rf.score(X_val, y_val):.4f}")
+
+    # Step 5: Train Deep Learning Model
+    print("--- Phase 5: Training Deep Learning Model ---")
+    model = HousePricePredictor(X_train.shape[1])
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    criterion = nn.MSELoss()
+
+    for epoch in range(100):
+        optimizer.zero_grad()
+        outputs = model(torch.tensor(X_train, dtype=torch.float32))
+        loss = criterion(outputs, torch.tensor(y_train.values, dtype=torch.float32).view(-1,1))
+        loss.backward()
+        optimizer.step()
+
+    # Step 6: Evaluate (MSE)
+    model.eval()
+    with torch.no_grad():
+        preds = model(torch.tensor(X_test, dtype=torch.float32)).numpy()
+        print(f"Test RMSE: {np.sqrt(mean_squared_error(y_test, preds)):.2f}")
+
+    # Step 8: Package (ONNX & PTH)
+    print("--- Phase 8: Packaging ---")
+    dummy_input = torch.randn(1, X_train.shape[1])
+    torch.onnx.export(model, dummy_input, "house_price_model.onnx")
+    torch.save(model.state_dict(), "house_price_model.pth")
+    print("Models saved successfully.")
+
+if __name__ == "__main__":
+    run_training()

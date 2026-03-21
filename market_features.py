@@ -1,22 +1,20 @@
-# market_features.py
 import numpy as np
 
-def scrape_market_trends():
+def scrape_market_trends(city_name):
     """
-    Simulates real-time market data scraping.
-    Provides the 'Demand Index' for the RL Agent to adjust pricing.
+    Simulates a live API call to fetch current 2026 market rates.
+    Used for Phase 10: Monitoring.
     """
-    # In production, this would use BeautifulSoup or an API to check 
-    # inventory levels and interest rates in the specific region.
-    
-    # Generate a demand index: 1.0 is stable, >1.0 is high demand, <1.0 is low
-    demand_index = np.random.uniform(0.8, 1.3)
-    
-    # Mock data for local market sentiment
-    market_data = {
-        "demand_index": round(demand_index, 2),
-        "inventory_status": "Low" if demand_index > 1.1 else "Normal",
-        "avg_days_on_market": int(30 / demand_index)
+    # 2026 Urban Benchmarks (Avg rate per sqft)
+    market_benchmarks = {
+        "Delhi": 18500,
+        "Mumbai": 34200,
+        "Hyderabad": 8700,
+        "Visakhapatnam": 7100
     }
     
-    return market_data
+    base_rate = market_benchmarks.get(city_name, 6000)
+    # Add a random daily market fluctuation (+/- 3%)
+    live_rate = base_rate * np.random.uniform(0.97, 1.03)
+    
+    return round(live_rate, 2)

@@ -1,25 +1,25 @@
-# rl_price_trend.py
-import numpy as np
+import logging
 
 class RLPriceAgent:
-    """
-    Reinforcement Learning Agent that adjusts the base neural network 
-    prediction based on real-time market volatility.
-    """
-    def __init__(self):
-        # In a fully trained state, these would be Q-table values or weights
-        self.learning_rate = 0.01
+    def __init__(self, alert_threshold=0.15):
+        self.threshold = alert_threshold
 
-    def adjust_price(self, base_price, demand_index):
+    def monitor_drift(self, predicted_unit_rate, live_market_rate):
         """
-        Action: Adjust price based on Demand 'State'.
-        If demand is high (>1.1), the agent learns to nudge price up.
+        Detects 'Model Drift' by comparing model predictions vs live market.
+        Metric: Absolute Percentage Error.
         """
-        # Simple policy simulation for the demo
-        adjustment_factor = 1.0
-        if demand_index > 1.1:
-            adjustment_factor = 1.05  # 5% Premium
-        elif demand_index < 0.9:
-            adjustment_factor = 0.95  # 5% Discount
+        drift = abs(predicted_unit_rate - live_market_rate) / live_market_rate
+        
+        if drift > self.threshold:
+            status = f"⚠️ HIGH DRIFT ({drift:.2%})"
+            logging.warning(f"Retraining Triggered: Model is off by {drift:.2%}")
+        else:
+            status = f"✅ STABLE ({drift:.2%})"
             
-        return base_price * adjustment_factor
+        return status
+
+if __name__ == "__main__":
+    agent = RLPriceAgent()
+    # Example: Model predicts 8000/sqft, Market is 9500/sqft
+    print(f"Monitoring Status: {agent.monitor_drift(8000, 9500)}")
