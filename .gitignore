@@ -1,19 +1,14 @@
-# Python cache
+# Python artifacts
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# Environment variables (NEVER upload API keys)
+# Large Model Files (Keep these local or use Git LFS)
+# house_price_model.pth
+# artifacts.pkl
+# scaler.pkl
+
+# Environment
 .env
-
-# Model artifacts and weights
-# *.pkl
-# *.pth
-
-# Data and caches
-kc_house_data.csv
-image_cache/
-
-# Streamlit/Virtual environments (if you make one later)
-.streamlit/
 venv/
 env/
