@@ -1,22 +1,19 @@
-# Core Data & Math
-pandas
-numpy
-scikit-learn
-matplotlib
+# Fixed versions for Cloud Stability
+numpy==1.26.4
+pandas==2.2.1
+scikit-learn==1.3.2
+matplotlib==3.8.2
 
-# AI & Deep Learning
-torch
-torchvision
-onnx
-onnxscript
-shap
+# AI Engine (3.11 compatible)
+torch==2.2.1
+torchvision==0.17.1
+shap==0.44.0
 
-# THE CRITICAL FIX: Downgrade protobuf to avoid the Descriptor error
+# THE CRITICAL UI FIX
 protobuf==3.20.3
+streamlit==1.32.0
 
-# Geospatial & Web
-streamlit
+# Geospatial & Support
 geopy
-pygeohash
 requests
 altair
