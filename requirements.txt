@@ -1,17 +1,17 @@
-# Use NumPy 2.x to match your local machine
-numpy>=2.0.0
-pandas>=2.2.2
+# Fixed versions for Python 3.11 Stability
+numpy==1.26.4
+pandas==2.2.1
 scikit-learn==1.4.2
-matplotlib>=3.8.0
+matplotlib==3.8.2
 
 # AI Engine
-torch==2.2.1
-torchvision==0.17.1
-shap==0.45.1
+torch==2.2.1 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.17.1 --index-url https://download.pytorch.org/whl/cpu
+shap==0.44.0
 
-# System Fixes
+# System & UI Fixes
 protobuf==3.20.3
-streamlit==1.32.2
+streamlit==1.32.0
 geopy
 requests
 altair
