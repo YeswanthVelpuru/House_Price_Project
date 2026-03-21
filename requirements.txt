@@ -11,6 +11,9 @@ onnx
 onnxscript
 shap
 
+# THE CRITICAL FIX: Downgrade protobuf to avoid the Descriptor error
+protobuf==3.20.3
+
 # Geospatial & Web
 streamlit
 geopy
